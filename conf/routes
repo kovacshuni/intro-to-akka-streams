@@ -1,2 +1,0 @@
-POST    /rip                        controllers.RipTube.rip
-PUT     /dummy                      controllers.RipTube.dummy

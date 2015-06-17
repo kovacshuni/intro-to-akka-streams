@@ -1,18 +1,13 @@
+organization := """com.hunorkovacs"""
+
 name := """riptube"""
 
 version := "1.0.0-SNAPSHOT"
 
-lazy val root = (project in file(".")).enablePlugins(PlayScala)
-
 scalaVersion := "2.11.6"
 
-libraryDependencies ++= Seq(
-  "io.spray" %% "spray-client" % "1.3.3",
-  specs2 % Test
+libraryDependencies ++= List(
+  "com.typesafe.akka" %% "akka-http-experimental" % "1.0-RC3",
+  "org.slf4j" % "slf4j-api" % "1.7.12",
+  "ch.qos.logback" % "logback-classic" % "1.1.3"
 )
-
-resolvers += "scalaz-bintray" at "http://dl.bintray.com/scalaz/releases"
-
-// Play provides two styles of routers, one expects its actions to be injected, the
-// other, legacy style, accesses its actions statically.
-routesGenerator := InjectedRoutesGenerator
