@@ -1,6 +1,6 @@
 package com.hunorkovacs.workpulling
 
-import akka.actor.{Terminated, Props, ActorRef, Actor}
+import akka.actor._
 import com.hunorkovacs.collection.mutable.BoundedRejectQueue
 import com.hunorkovacs.workpulling.Master._
 import com.hunorkovacs.workpulling.Worker._
@@ -26,7 +26,7 @@ class Master[T](private val workLimit: Int, private val workerLimit: Int) extend
   private val workers = mutable.Set.empty[ActorRef]
   private val workQueue = new BoundedRejectQueue[Work[T]](workLimit)()
 
-  def receive = {
+  override def receive = {
     case work: Work[T] =>
       if (workQueue.add(work)) {
         if (workers.isEmpty)
@@ -59,4 +59,6 @@ class Master[T](private val workLimit: Int, private val workerLimit: Int) extend
         workers.add(newWorker)
       }
   }
+
+  override val supervisorStrategy = SupervisorStrategy.Stop
 }
