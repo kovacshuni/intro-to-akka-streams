@@ -33,5 +33,5 @@ abstract class Worker[T, R](private val master: ActorRef)(implicit manifest: Man
       }
   }
 
-  abstract def doWork(work: T): Future[R]
+  def doWork(work: T): Future[R]
 }

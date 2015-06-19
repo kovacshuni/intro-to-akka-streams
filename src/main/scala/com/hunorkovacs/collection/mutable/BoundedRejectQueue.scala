@@ -4,24 +4,24 @@ import java.util
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
-class BoundedRejectQueue[E](private val limit: Int) extends ConcurrentLinkedQueue[E]
+class BoundedRejectQueue[E](private val limit: Int,
+                            private val refreshPeriod: Int) extends ConcurrentLinkedQueue[E]
     with util.Queue[E] with java.io.Serializable {
-
-  private val PeriodLength = 100
 
   private val sizeCounter = new AtomicInteger(0)
   private val operationCounter = new AtomicInteger(0)
 
   override def add(e: E): Boolean = {
-    refreshSizeApprox()
-    if (sizeCounter.get() < limit)
+    refreshSize()
+    if (sizeCounter.get() < limit) {
+      sizeCounter.incrementAndGet()
       super.add(e)
-    else
+    } else
       false
   }
 
-  override def poll(): Option[E] = {
-    refreshSizeApprox()
+  def pollOption: Option[E] = {
+    refreshSize()
     val tail = Option(super.poll())
     if (tail.isDefined)
       sizeCounter.decrementAndGet()
@@ -32,12 +32,18 @@ class BoundedRejectQueue[E](private val limit: Int) extends ConcurrentLinkedQueu
    * Use this only for obtaining the size if you expect it to be a higher number, not 0.
    * Use isEmpty() for 0 condition.
    */
-  def sizeApprox() = sizeCounter.get()
+  override def size = sizeCounter.get()
 
-  private def refreshSizeApprox() = {
-    if (operationCounter.getAndIncrement() > PeriodLength) {
-      sizeCounter.set(super.size())
+  private def refreshSize() = {
+    if (operationCounter.getAndIncrement() > refreshPeriod) {
+      sizeCounter.set(super.size)
       operationCounter.set(0)
     }
   }
+}
+
+object BoundedRejectQueue {
+
+  def apply[E](limit: Int, refreshPeriod: Int = 100) =
+    new BoundedRejectQueue[E](limit, refreshPeriod)
 }

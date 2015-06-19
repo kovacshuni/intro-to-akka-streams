@@ -20,11 +20,11 @@ object Master {
 
 }
 
-class Master[T](private val workLimit: Int, private val workerLimit: Int) extends Actor {
+class Master[T, R](private val workLimit: Int, private val workerLimit: Int) extends Actor {
 
   private val logger = LoggerFactory.getLogger(getClass)
   private val workers = mutable.Set.empty[ActorRef]
-  private val workQueue = new BoundedRejectQueue[Work[T]](workLimit)()
+  private val workQueue = BoundedRejectQueue[Work[T]](workLimit)
 
   override def receive = {
     case work: Work[T] =>
@@ -37,7 +37,7 @@ class Master[T](private val workLimit: Int, private val workerLimit: Int) extend
 
     case GiveMeWork =>
       if (!workQueue.isEmpty) {
-        val work = workQueue.poll()
+        val work = workQueue.pollOption
         if (work.isDefined)
           sender() ! work
       }
@@ -54,11 +54,11 @@ class Master[T](private val workLimit: Int, private val workerLimit: Int) extend
 
     case RefreshNrOfWorkers =>
       (1 to (workerLimit - workers.size)) foreach { _ =>
-        val newWorker = context.actorOf(Props[Worker])
+        val newWorker = context.actorOf(Props[Worker[T, R]])
         context watch newWorker
         workers.add(newWorker)
       }
   }
 
-  override val supervisorStrategy = SupervisorStrategy.Stop
+  override val supervisorStrategy = SupervisorStrategy.stoppingStrategy
 }
