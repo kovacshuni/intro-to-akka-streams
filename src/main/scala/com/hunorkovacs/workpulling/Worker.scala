@@ -1,6 +1,6 @@
 package com.hunorkovacs.workpulling
 
-import akka.actor.{Actor, ActorRef}
+import akka.actor.{Props, Actor, ActorRef}
 import com.hunorkovacs.workpulling.Master._
 import com.hunorkovacs.workpulling.Worker._
 
@@ -12,9 +12,10 @@ object Worker {
 
   case class Work[T](work: T)
 
+  def props[T, R](master: ActorRef) = Props(classOf[Worker[T, R]], master)
 }
 
-abstract class Worker[T, R](private val master: ActorRef)(implicit manifest: Manifest[T]) extends Actor {
+abstract class Worker[T, R](private val master: ActorRef) extends Actor {
   implicit val ec = context.dispatcher
 
   override def preStart() {
@@ -27,8 +28,8 @@ abstract class Worker[T, R](private val master: ActorRef)(implicit manifest: Man
       master ! GiveMeWork
 
     case Work(work: T) =>
-      doWork(work) onComplete { t =>
-        master ! t
+      doWork(work) onComplete { result =>
+        master ! WorkResult(result)
         master ! GiveMeWork
       }
   }
