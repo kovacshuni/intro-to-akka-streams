@@ -1,12 +1,13 @@
 package com.hunorkovacs.workpulling
 
 import akka.actor._
-import com.hunorkovacs.workpulling.Master.WorkResult
+import com.hunorkovacs.collection.mutable.BoundedRejectWorkQueue
+import com.hunorkovacs.workpulling.Master.WorkWithResult
 import com.hunorkovacs.workpulling.Worker.Work
 import org.slf4j.LoggerFactory
 import org.specs2.mutable.Specification
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Success, Try}
 
 import scala.concurrent.duration._
@@ -21,10 +22,10 @@ class WorkPullingSpec extends Specification {
     "work." in {
       logger.info("First test.")
       val n = 10
-      val collector = system.actorOf(Props(classOf[SetCollector[Int]]), "collector")
+      val collector = system.actorOf(Props(classOf[Collector[Int, Int]]), "collector")
       val inbox = Inbox.create(system)
-      inbox.send(collector, SetCollector.RegisterReady(n))
-      val master = system.actorOf(Master.props[Int, Int](collector, classOf[SleepWorker], n, 1), "master")
+      inbox.send(collector, Collector.RegisterReady(n))
+      val master = system.actorOf(Master.props[Int, Int](collector, classOf[SleepWorker], 1, BoundedRejectWorkQueue[Int](n)), "master")
 
       (1 to n).foreach(i => master ! Work(i))
 
@@ -33,24 +34,21 @@ class WorkPullingSpec extends Specification {
   }
 }
 
-object SetCollector {
+object Collector {
   case class RegisterReady(n: Int)
   case object AllReady
 }
 
-class SetCollector[T] extends Actor {
-  import SetCollector._
+class Collector[T, R] extends Actor {
+  import Collector._
 
-  private val logger = LoggerFactory.getLogger(getClass)
-
-  private var set = Set[Try[T]]()
+  private var set = Set[WorkWithResult[T, R]]()
   var toNotify: ActorRef = ActorRef.noSender
-  var n: Int = 0
+  var n = 0
 
   override def receive = {
-    case t: WorkResult[T] =>
-      logger.info("WorkResult received: {}", t)
-      set += t.result
+    case workWithResult: WorkWithResult[T, R] =>
+      set += workWithResult
       if (set.size >= 10)
         toNotify ! set.toList
 
@@ -61,11 +59,10 @@ class SetCollector[T] extends Actor {
 }
 
 private class SleepWorker(master: ActorRef) extends Worker[Int, Int](master) {
-  private val logger = LoggerFactory.getLogger(getClass)
+  implicit private val ec = ExecutionContext.Implicits.global
 
   override def doWork(work: Int) = Future {
     //      Thread.sleep(1000)
-    logger.info("Working...")
     work
   }
 }
