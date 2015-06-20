@@ -6,6 +6,7 @@
     </appender>
 
     <logger name="com.hunorkovacs.riptube" level="DEBUG" />
+    <logger name="com.hunorkovacs.workpulling" level="DEBUG" />
     <logger name="akka" level="DEBUG" />
 
     <root level="ERROR">

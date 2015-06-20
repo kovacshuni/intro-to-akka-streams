@@ -1,5 +1,7 @@
 package com.hunorkovacs.workpulling
 
+import java.util.concurrent.TimeoutException
+
 import akka.actor._
 import com.hunorkovacs.collection.mutable.BoundedRejectWorkQueue
 import com.hunorkovacs.workpulling.Master.WorkWithResult
@@ -21,10 +23,11 @@ class WorkPullingSpec extends Specification {
   "Sending work and receiving results" should {
     "flow nicely with 1 worker." in {
       val n = 10
-      val collector = system.actorOf(Props(classOf[Collector[Int, Int]]), "collector")
+      val collector = system.actorOf(Props(classOf[Collector[Int, Int]]), "collector-1")
       val inbox = Inbox.create(system)
       inbox.send(collector, Collector.RegisterReady(n))
-      val master = system.actorOf(Master.props[Promise[Int], Int](collector, classOf[PromiseKeeperWorker], 1, BoundedRejectWorkQueue[Promise[Int]](n)), "master")
+      val master = system.actorOf(Master.props[Promise[Int], Int](
+        collector, classOf[PromiseKeeperWorker], 1, BoundedRejectWorkQueue[Promise[Int]](n)), "master-1")
 
       val worksAndNumbers = (1 to n).toList.map(i => (Work(Promise.successful(i)), i))
       val works = worksAndNumbers.map(wn => wn._1)
@@ -35,7 +38,39 @@ class WorkPullingSpec extends Specification {
       actualResults must containAllOf(expectedResults)
       actualResults.size must beEqualTo(n)
     }
+    "flow nicely with n workers." in {
+      val n = 10
+      val collector = system.actorOf(Props(classOf[Collector[Int, Int]]), "collector-2")
+      val inbox = Inbox.create(system)
+      inbox.send(collector, Collector.RegisterReady(n))
+      val master = system.actorOf(Master.props[Promise[Int], Int](
+        collector, classOf[PromiseKeeperWorker], n, BoundedRejectWorkQueue[Promise[Int]](n)), "master-2")
+
+      val worksAndNumbers = (1 to n).toList.map(i => (Work(Promise.successful(i)), i))
+      val works = worksAndNumbers.map(wn => wn._1)
+      works.foreach(master !)
+
+      val expectedResults = worksAndNumbers.map(wn => WorkWithResult(wn._1.work, Success(wn._2)))
+      val actualResults = inbox.receive(2 seconds).asInstanceOf[Set[WorkWithResult[Promise[Int], Int]]]
+      actualResults must containAllOf(expectedResults)
+      actualResults.size must beEqualTo(n)
+    }
+    "not flow with 0 workers." in {
+      val n = 10
+      val collector = system.actorOf(Props(classOf[Collector[Int, Int]]), "collector-3")
+      val inbox = Inbox.create(system)
+      inbox.send(collector, Collector.RegisterReady(n))
+      val master = system.actorOf(Master.props[Promise[Int], Int](
+        collector, classOf[PromiseKeeperWorker], 0, BoundedRejectWorkQueue[Promise[Int]](n)), "master-3")
+
+      val works = (1 to n).toList.map(w => Work(Promise.successful(w)))
+      works.foreach(master !)
+
+      inbox.receive(1 seconds).asInstanceOf[Set[WorkWithResult[Promise[Int], Int]]] must throwA[TimeoutException]
+    }
   }
+
+
 }
 
 object Collector {
