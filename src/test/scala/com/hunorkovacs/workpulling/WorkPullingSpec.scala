@@ -5,6 +5,7 @@ import java.util.concurrent.TimeoutException
 import akka.actor._
 import com.hunorkovacs.collection.mutable.BoundedRejectWorkQueue
 import com.hunorkovacs.workpulling.Master.WorkWithResult
+import com.hunorkovacs.workpulling.Master.TooBusy
 import com.hunorkovacs.workpulling.Worker.Work
 import org.slf4j.LoggerFactory
 import org.specs2.mutable.Specification
@@ -67,6 +68,26 @@ class WorkPullingSpec extends Specification {
       works.foreach(master !)
 
       inbox.receive(1 seconds).asInstanceOf[Set[WorkWithResult[Promise[Int], Int]]] must throwA[TimeoutException]
+    }
+    "reject more work than buffer size. But compute the rest fine." in {
+      val n = 10
+      val collector = system.actorOf(Props(classOf[Collector[Int, Int]]), "collector-4")
+      val inbox = Inbox.create(system)
+      inbox.send(collector, Collector.RegisterReady(n))
+      val master = system.actorOf(Master.props[Promise[Int], Int](
+        collector, classOf[PromiseKeeperWorker], n, BoundedRejectWorkQueue[Promise[Int]](n)), "master-4")
+
+      val promisesAndNumbers = (1 to 2 * n).toList.map(i => (Work(Promise[Int]()), i))
+      val works = promisesAndNumbers.map(wn => wn._1)
+      works.foreach(inbox.send(master, _))
+
+      (1 to n).foreach(_ => inbox.receive(1 second) must beEqualTo(TooBusy))
+
+      promisesAndNumbers.foreach(pn => pn._1.work.success(pn._2))
+      val expectedResults = promisesAndNumbers.filter(_._2 <= n).map(wn => WorkWithResult(wn._1.work, Success(wn._2)))
+      val actualResults = inbox.receive(2 seconds).asInstanceOf[Set[WorkWithResult[Promise[Int], Int]]]
+      actualResults must containAllOf(expectedResults)
+      actualResults.size must beEqualTo(n)
     }
   }
 
