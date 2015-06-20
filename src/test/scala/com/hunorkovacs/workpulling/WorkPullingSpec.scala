@@ -7,7 +7,7 @@ import com.hunorkovacs.workpulling.Worker.Work
 import org.slf4j.LoggerFactory
 import org.specs2.mutable.Specification
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{Promise, ExecutionContext, Future}
 import scala.util.{Success, Try}
 
 import scala.concurrent.duration._
@@ -18,22 +18,22 @@ class WorkPullingSpec extends Specification {
 
   private val system = ActorSystem("test-actor-system")
 
-  "Working" should {
-    "work." in {
-      logger.info("First test.")
+  "Sending work and receiving results" should {
+    "flow nicely with 1 worker." in {
       val n = 10
       val collector = system.actorOf(Props(classOf[Collector[Int, Int]]), "collector")
       val inbox = Inbox.create(system)
       inbox.send(collector, Collector.RegisterReady(n))
-      val master = system.actorOf(Master.props[Int, Int](collector, classOf[SleepWorker], 1, BoundedRejectWorkQueue[Int](n)), "master")
+      val master = system.actorOf(Master.props[Promise[Int], Int](collector, classOf[PromiseKeeperWorker], 1, BoundedRejectWorkQueue[Promise[Int]](n)), "master")
 
-      (1 to n).foreach(i => master ! Work(i))
+      val worksAndNumbers = (1 to n).toList.map(i => (Work(Promise.successful(i)), i))
+      val works = worksAndNumbers.map(wn => wn._1)
+      works.foreach(master !)
 
-      val results = inbox.receive(2 seconds).asInstanceOf[Set[WorkWithResult[Int, Int]]]
-      (1 to n) foreach { i =>
-        results must contain(WorkWithResult(i, Success(i)))
-      }
-      results.size must beEqualTo(n)
+      val expectedResults = worksAndNumbers.map(wn => WorkWithResult(wn._1.work, Success(wn._2)))
+      val actualResults = inbox.receive(2 seconds).asInstanceOf[Set[WorkWithResult[Promise[Int], Int]]]
+      actualResults must containAllOf(expectedResults)
+      actualResults.size must beEqualTo(n)
     }
   }
 }
@@ -62,11 +62,8 @@ class Collector[T, R] extends Actor {
   }
 }
 
-private class SleepWorker(master: ActorRef) extends Worker[Int, Int](master) {
+private class PromiseKeeperWorker(master: ActorRef) extends Worker[Promise[Int], Int](master) {
   implicit private val ec = ExecutionContext.Implicits.global
 
-  override def doWork(work: Int) = Future {
-    //      Thread.sleep(1000)
-    work
-  }
+  override def doWork(work: Promise[Int]) = work.future
 }
