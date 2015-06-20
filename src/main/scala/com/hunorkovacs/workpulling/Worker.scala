@@ -22,7 +22,7 @@ abstract class Worker[T, R](private val master: ActorRef) extends Actor {
 
   override def preStart() {
     if (logger.isDebugEnabled)
-      logger.debug(s"${self.path} - Registering itself to work for ${master.path}...")
+      logger.debug(s"${self.path} - Sending registration request to ${master.path}...")
     master ! RegisterWorker(self)
     if (logger.isDebugEnabled)
       logger.debug(s"${self.path} - Asking for work...")
@@ -39,8 +39,10 @@ abstract class Worker[T, R](private val master: ActorRef) extends Actor {
       if (logger.isDebugEnabled)
         logger.debug(s"${self.path} - Starting to work on work unit with hashcode ${work.hashCode}...")
       doWorkAssociated(work) onSuccess { case workWithResult =>
-        if (logger.isDebugEnabled)
-          logger.debug(s"${self.path} - Sending result with hashcode ${workWithResult.result.hashCode} of the work unit with hashcode ${workWithResult.work.hashCode}...")
+        if (logger.isDebugEnabled) {
+          val resultHash = workWithResult.result.getOrElse(workWithResult).hashCode
+          logger.debug(s"${self.path} - Sending result with hashcode $resultHash of the work unit with hashcode ${workWithResult.work.hashCode}...")
+        }
         master ! workWithResult
         if (logger.isDebugEnabled)
           logger.debug(s"${self.path} - Asking for work from ${master.path}...")

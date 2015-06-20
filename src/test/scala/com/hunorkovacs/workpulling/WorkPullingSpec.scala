@@ -29,7 +29,11 @@ class WorkPullingSpec extends Specification {
 
       (1 to n).foreach(i => master ! Work(i))
 
-      inbox.receive(2 seconds) must beEqualTo((1 to n).foldLeft(Set[Try[Int]]())((s, i) => s + Success(i)))
+      val results = inbox.receive(2 seconds).asInstanceOf[Set[WorkWithResult[Int, Int]]]
+      (1 to n) foreach { i =>
+        results must contain(WorkWithResult(i, Success(i)))
+      }
+      results.size must beEqualTo(n)
     }
   }
 }
@@ -50,7 +54,7 @@ class Collector[T, R] extends Actor {
     case workWithResult: WorkWithResult[T, R] =>
       set += workWithResult
       if (set.size >= 10)
-        toNotify ! set.toList
+        toNotify ! set
 
     case RegisterReady(m) =>
       toNotify = sender()

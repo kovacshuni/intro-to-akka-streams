@@ -45,10 +45,10 @@ class Master[T, R](private val resultCollector: ActorRef,
   override def receive = {
     case work: Work[T] =>
       if (logger.isDebugEnabled)
-        logger.debug(s"${self.path} - Received work unit with hashcode ${work.hashCode}.")
+        logger.debug(s"${self.path} - Received work unit with hashcode ${work.work.hashCode}.")
       if (workBuffer.add(work)) {
         if (logger.isDebugEnabled)
-          logger.debug(s"${self.path} - Work unit with hashcode ${work.hashCode} added to queue.")
+          logger.debug(s"${self.path} - Work unit with hashcode ${work.work.hashCode} added to queue.")
         if (workers.isEmpty)
           if (logger.isWarnEnabled)
             logger.warn(s"${self.path} - There are no workers registered but work is coming in.")
@@ -62,10 +62,12 @@ class Master[T, R](private val resultCollector: ActorRef,
       }
 
     case workResult: WorkWithResult[T, R] =>
-      if (logger.isDebugEnabled)
+      if (logger.isDebugEnabled) {
+        val resultHash = workResult.result.getOrElse(workResult).hashCode
         logger.debug(s"${self.path} - Received result from worker ${sender().path} with " +
-          s"hashcode ${workResult.result.hashCode} for the work unit with " +
+          s"hashcode $resultHash for the work unit with " +
           s"hashcode ${workResult.work.hashCode}. Forwarding to collector.")
+      }
       resultCollector ! workResult
 
     case GiveMeWork =>
@@ -95,8 +97,7 @@ class Master[T, R](private val resultCollector: ActorRef,
       (1 to (nWorkers - workers.size)) foreach { _ =>
         val newWorker = context.actorOf(Props(workerType, self), "pullingworker-" + randomUUID)
         if (logger.isDebugEnabled)
-          logger.debug(s"${self.path} - Created new worker ${newWorker.path}. Sending itself message to register...")
-        self ! RegisterWorker(newWorker)
+          logger.debug(s"${self.path} - Created new worker ${newWorker.path}.")
       }
   }
 
