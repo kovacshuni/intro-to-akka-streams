@@ -17,17 +17,11 @@ object Master {
   case class WorkWithResult[T, R](work: T, result: Try[R])
 
   case object TooBusy
-
-  def props[T, R](resultCollector: ActorRef,
-                  workerType: Class[_ <: Worker[T, R]],
-                  nWorkers: Int,
-                  workBuffer: WorkBuffer[T]) = Props(classOf[Master[T, R]], resultCollector, workerType, nWorkers, workBuffer)
 }
 
-class Master[T, R](private val resultCollector: ActorRef,
-                   private val workerType: Class[_ <: Worker[T, R]],
-                   private val nWorkers: Int,
-                   private val workBuffer: WorkBuffer[T]) extends Actor {
+abstract class Master[T, R](private val resultCollector: ActorRef,
+                            private val nWorkers: Int,
+                            private val workBuffer: WorkBuffer[T]) extends Actor {
 
   private val logger = LoggerFactory.getLogger(getClass)
   private val workers = mutable.Set.empty[ActorRef]
@@ -79,13 +73,15 @@ class Master[T, R](private val resultCollector: ActorRef,
 
   private def refreshNrOfWorkers() = {
     while (workers.size < nWorkers) {
-      val newWorker = context.actorOf(Props(workerType, self), "pullingworker-" + randomUUID)
+      val newWorker = context.actorOf(newWorkerProps, "pullingworker-" + randomUUID)
       context.watch(newWorker)
       workers += newWorker
       if (logger.isDebugEnabled)
         logger.debug(s"${self.path} - Created new worker ${newWorker.path} and watching...")
     }
   }
+
+  protected def newWorkerProps: Props
 
   override val supervisorStrategy = SupervisorStrategy.stoppingStrategy
 }

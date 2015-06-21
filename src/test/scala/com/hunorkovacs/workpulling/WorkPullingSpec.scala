@@ -28,8 +28,8 @@ class WorkPullingSpec extends Specification {
       val collector = system.actorOf(Props(classOf[Collector[Int, Int]]), "collector-1")
       val inbox = Inbox.create(system)
       inbox.send(collector, Collector.RegisterReady(n))
-      val master = system.actorOf(Master.props[Promise[Int], Int](
-        collector, classOf[PromiseKeeperWorker], 1, BoundedRejectWorkQueue[Promise[Int]](n)), "master-1")
+      val master = system.actorOf(PromiseKeeperMaster.props(
+        collector, 1, BoundedRejectWorkQueue[Promise[Int]](n)), "master-1")
 
       val worksAndNumbers = (1 to n).toList.map(i => (Work(Promise.successful(i)), i))
       val works = worksAndNumbers.map(wn => wn._1)
@@ -45,8 +45,8 @@ class WorkPullingSpec extends Specification {
       val collector = system.actorOf(Props(classOf[Collector[Int, Int]]), "collector-2")
       val inbox = Inbox.create(system)
       inbox.send(collector, Collector.RegisterReady(n))
-      val master = system.actorOf(Master.props[Promise[Int], Int](
-        collector, classOf[PromiseKeeperWorker], n, BoundedRejectWorkQueue[Promise[Int]](n)), "master-2")
+      val master = system.actorOf(PromiseKeeperMaster.props(
+        collector, n, BoundedRejectWorkQueue[Promise[Int]](n)), "master-2")
 
       val worksAndNumbers = (1 to n).toList.map(i => (Work(Promise.successful(i)), i))
       val works = worksAndNumbers.map(wn => wn._1)
@@ -62,8 +62,8 @@ class WorkPullingSpec extends Specification {
       val collector = system.actorOf(Props(classOf[Collector[Int, Int]]), "collector-3")
       val inbox = Inbox.create(system)
       inbox.send(collector, Collector.RegisterReady(n))
-      val master = system.actorOf(Master.props[Promise[Int], Int](
-        collector, classOf[PromiseKeeperWorker], 0, BoundedRejectWorkQueue[Promise[Int]](n)), "master-3")
+      val master = system.actorOf(PromiseKeeperMaster.props(
+        collector, 0, BoundedRejectWorkQueue[Promise[Int]](n)), "master-3")
 
       val works = (1 to n).toList.map(w => Work(Promise.successful(w)))
       works.foreach(master !)
@@ -75,8 +75,8 @@ class WorkPullingSpec extends Specification {
       val collector = system.actorOf(Props(classOf[Collector[Int, Int]]), "collector-4")
       val inbox = Inbox.create(system)
       inbox.send(collector, Collector.RegisterReady(n))
-      val master = system.actorOf(Master.props[Promise[Int], Int](
-        collector, classOf[PromiseKeeperWorker], n, BoundedRejectWorkQueue[Promise[Int]](n)), "master-4")
+      val master = system.actorOf(PromiseKeeperMaster.props(
+        collector, n, BoundedRejectWorkQueue[Promise[Int]](n)), "master-4")
 
       val promisesAndNumbers = (1 to 2 * n).toList.map(i => (Work(Promise[Int]()), i))
       val works = promisesAndNumbers.map(wn => wn._1)
@@ -95,8 +95,8 @@ class WorkPullingSpec extends Specification {
       val collector = system.actorOf(Props(classOf[Collector[Int, Int]]), "collector-5")
       val inbox = Inbox.create(system)
       inbox.send(collector, Collector.RegisterReady(n))
-      val master = system.actorOf(Master.props[Promise[Int], Int](
-        collector, classOf[PromiseKeeperWorker], n, BoundedRejectWorkQueue[Promise[Int]](n)), "master-5")
+      val master = system.actorOf(PromiseKeeperMaster.props(
+        collector, n, BoundedRejectWorkQueue[Promise[Int]](n)), "master-5")
 
       val worksAndNumbers = (1 to n).toList.map { i =>
         val e = new RuntimeException(i.toString)
@@ -115,8 +115,8 @@ class WorkPullingSpec extends Specification {
       val m = 100
       val w = 3
       val inbox = Inbox.create(system)
-      val master = system.actorOf(Master.props[Promise[Int], Int](
-        inbox.getRef(), classOf[PromiseKeeperWorker], w, BoundedRejectWorkQueue[Promise[Int]](n)), "master-6")
+      val master = system.actorOf(PromiseKeeperMaster.props(
+        inbox.getRef(), w, BoundedRejectWorkQueue[Promise[Int]](n)), "master-6")
 
       val promisesAndTries = (1 to m).toList.map { i =>
         val e: (Work[Promise[Int]], Try[Int]) = i % 2 match {
@@ -155,6 +155,46 @@ class WorkPullingSpec extends Specification {
       actualResults.size must beEqualTo(m)
     }
   }
+
+  "Crashing worker" should {
+    "make a refresh action in master who will replace the worker." in {
+      val queueSize = 8
+      val nWorks = 100
+      val nWorkers = 3
+      val nCrashers = 5
+
+      object Propses {
+        val propsQueue = mutable.Queue[Props]()
+
+        def propses: Props = propsQueue.dequeue()
+
+        def setMaster(master: ActorRef) = {
+          propsQueue.dequeueAll(_ => true)
+          val crashingProps = (1 to nCrashers).toList.map(_ => Props(classOf[CrashingWorker], master))
+          (crashingProps :+ Props(classOf[PromiseWorker], master)).foreach(propsQueue.enqueue(_))
+        }
+      }
+
+      val inbox = Inbox.create(system)
+      val master = system.actorOf(
+        Props(classOf[PluggeableMaster], inbox.getRef(), nWorkers, BoundedRejectWorkQueue[Promise[Int]](queueSize), Propses.propses),
+        "master-7"
+      )
+      Propses.setMaster(master)
+
+      val promisesAndResults = (1 to nWorks).toList.map(i => (Work(Promise[Int]()), Success(i)))
+      promisesAndResults.foreach(pr => pr._1.work.complete(pr._2))
+
+      val actualResults = promisesAndResults.map { pr =>
+        inbox.send(master, pr._1)
+        inbox.receive(1 second).asInstanceOf[WorkWithResult[Promise[Int], Int]]
+      }
+
+      val expectedResults = promisesAndResults.map(pt => WorkWithResult(pt._1.work, pt._2))
+      actualResults must containAllOf(expectedResults)
+      actualResults.size must beEqualTo(nWorks)
+    }
+  }
 }
 
 object Collector {
@@ -181,8 +221,37 @@ class Collector[T, R] extends Actor {
   }
 }
 
-private class PromiseKeeperWorker(master: ActorRef) extends Worker[Promise[Int], Int](master) {
+private class PromiseKeeperMaster(resultCollector: ActorRef, nWorkers: Int, workBuffer: WorkBuffer[Int])
+  extends Master[Int, Int](resultCollector, nWorkers, workBuffer) {
+
+  override protected def newWorkerProps =
+    Props(classOf[PromiseWorker], self)
+}
+
+private object PromiseKeeperMaster {
+  def props(resultCollector: ActorRef, nWorkers: Int, workBuffer: WorkBuffer[Promise[Int]]) =
+    Props(classOf[PromiseKeeperMaster], resultCollector, nWorkers, workBuffer)
+}
+
+private class PromiseWorker(master: ActorRef) extends Worker[Promise[Int], Int](master) {
   implicit private val ec = ExecutionContext.Implicits.global
 
   override def doWork(work: Promise[Int]) = work.future
+}
+
+private class PluggeableMaster(resultCollector: ActorRef, nWorkers: Int, workBuffer: WorkBuffer[Int],
+                                    propses: () => Props)
+  extends Master[Int, Int](resultCollector, nWorkers, workBuffer) {
+
+  override protected def newWorkerProps = propses()
+}
+
+private object PluggeableMaster {
+  def props(resultCollector: ActorRef, nWorkers: Int, workBuffer: WorkBuffer[Promise[Int]]) =
+    Props(classOf[PluggeableMaster], resultCollector, nWorkers, workBuffer)
+}
+
+private class CrashingWorker(master: ActorRef) extends PromiseWorker(master) {
+  override def doWork(work: Promise[Int]) =
+    throw new RuntimeException("crashed")
 }

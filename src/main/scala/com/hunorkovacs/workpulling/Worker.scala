@@ -12,8 +12,6 @@ object Worker {
   case object WorkAvailable
 
   case class Work[T](work: T)
-
-  def props[T, R](master: ActorRef) = Props(classOf[Worker[T, R]], master)
 }
 
 abstract class Worker[T, R](private val master: ActorRef) extends Actor {
