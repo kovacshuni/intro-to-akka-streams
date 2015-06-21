@@ -22,9 +22,6 @@ abstract class Worker[T, R](private val master: ActorRef) extends Actor {
 
   override def preStart() {
     if (logger.isDebugEnabled)
-      logger.debug(s"${self.path} - Sending registration request to ${master.path}...")
-    master ! RegisterWorker(self)
-    if (logger.isDebugEnabled)
       logger.debug(s"${self.path} - Asking for work...")
     master ! GiveMeWork
   }

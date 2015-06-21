@@ -18,10 +18,6 @@ object Master {
 
   case object TooBusy
 
-  case class RegisterWorker(worker: ActorRef)
-
-  case object RefreshNrOfWorkers
-
   def props[T, R](resultCollector: ActorRef,
                   workerType: Class[_ <: Worker[T, R]],
                   nWorkers: Int,
@@ -36,28 +32,21 @@ class Master[T, R](private val resultCollector: ActorRef,
   private val logger = LoggerFactory.getLogger(getClass)
   private val workers = mutable.Set.empty[ActorRef]
 
-  override def preStart() {
-    if (logger.isDebugEnabled)
-      logger.debug(s"${self.path} - Sending a message to itself to set up workers as a start...")
-    self ! RefreshNrOfWorkers
-  }
+  override def preStart() =
+    refreshNrOfWorkers()
 
   override def receive = {
     case work: Work[T] =>
-      if (logger.isDebugEnabled)
-        logger.debug(s"${self.path} - Received work unit with hashcode ${work.work.hashCode}.")
       if (workBuffer.add(work)) {
         if (logger.isDebugEnabled)
-          logger.debug(s"${self.path} - Work unit with hashcode ${work.work.hashCode} added to queue.")
+          logger.debug(s"${self.path} - Work unit with hashcode ${work.work.hashCode} added to queue. Sending notice to all workers...")
         if (workers.isEmpty)
           if (logger.isWarnEnabled)
             logger.warn(s"${self.path} - There are no workers registered but work is coming in.")
-        if (logger.isDebugEnabled)
-          logger.debug(s"${self.path} - Sending notice to all workers that there is work to do.")
         workers foreach (_ ! WorkAvailable)
       } else {
         if (logger.isInfoEnabled)
-          logger.info(s"${self.path} - Cannot handle more work because the queue is full. Sending answer: TooBusy...")
+          logger.info(s"${self.path} - Received work unit ${work.work.hashCode} but queue is full. TooBusy!")
         sender ! TooBusy
       }
 
@@ -81,24 +70,21 @@ class Master[T, R](private val resultCollector: ActorRef,
         }
       }
 
-    case RegisterWorker(worker) =>
-      if (logger.isDebugEnabled)
-        logger.debug(s"${self.path} - Registering worker ${worker.path}...")
-      context.watch(worker)
-      workers += worker
-
     case Terminated(worker) =>
       if (logger.isInfoEnabled)
         logger.info(s"${self.path} - Worker ${worker.path} died. Removing it from set of workers...")
       workers.remove(worker)
-      self ! RefreshNrOfWorkers
+      refreshNrOfWorkers()
+  }
 
-    case RefreshNrOfWorkers =>
-      (1 to (nWorkers - workers.size)) foreach { _ =>
-        val newWorker = context.actorOf(Props(workerType, self), "pullingworker-" + randomUUID)
-        if (logger.isDebugEnabled)
-          logger.debug(s"${self.path} - Created new worker ${newWorker.path}.")
-      }
+  private def refreshNrOfWorkers() = {
+    while (workers.size < nWorkers) {
+      val newWorker = context.actorOf(Props(workerType, self), "pullingworker-" + randomUUID)
+      context.watch(newWorker)
+      workers += newWorker
+      if (logger.isDebugEnabled)
+        logger.debug(s"${self.path} - Created new worker ${newWorker.path} and watching...")
+    }
   }
 
   override val supervisorStrategy = SupervisorStrategy.stoppingStrategy
