@@ -28,17 +28,19 @@ abstract class Worker[T, R] extends Actor {
   private val logger = LoggerFactory.getLogger(getClass)
   implicit private val ec = context.dispatcher
 
+  private var shouldAskForWork = true
+
   override def preStart() {
     if (logger.isDebugEnabled)
       logger.debug(s"${self.path} - Asking for work from ${context.parent.path}...")
-    context.parent ! GiveMeWork
+    askForWork(context.parent)
   }
 
   override def receive = {
     case WorkAvailable =>
       if (logger.isDebugEnabled)
-        logger.debug(s"${self.path} - Received notice that work is available. Asking for work from ${sender().path}...")
-      sender() ! GiveMeWork
+        logger.debug(s"${self.path} - Received notice that work is available.")
+      askForWork(sender())
 
     case work: WorkFrom[T] =>
       if (logger.isDebugEnabled)
@@ -51,9 +53,9 @@ abstract class Worker[T, R] extends Actor {
         }
         val returnTo = result.assigners.head
         returnTo ! result.popAssigner()
-        if (logger.isDebugEnabled)
-          logger.debug(s"${self.path} - Asking for work from ${returnTo.path}...")
-        returnTo ! GiveMeWork
+        shouldAskForWork = true
+
+        askForWork(returnTo)
       }
   }
 
@@ -64,5 +66,14 @@ abstract class Worker[T, R] extends Actor {
   }
 
   protected def doWork(work: T): Future[R]
+
+  private def askForWork(master: ActorRef) = {
+    if (shouldAskForWork) {
+      if (logger.isDebugEnabled)
+        logger.debug(s"${self.path} - Asking for work from ${master.path}...")
+      master ! GiveMeWork
+      shouldAskForWork = false
+    }
+  }
 }
 

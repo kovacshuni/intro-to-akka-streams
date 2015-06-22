@@ -64,7 +64,7 @@ abstract class Master[T, R](private val nWorkers: Int,
 
     case GiveMeWork =>
       if (logger.isDebugEnabled)
-        logger.debug(s"${self.path} - ${sender().path} asked for work.")
+        logger.debug(s"${self.path} - Worker asked for work: ${sender().path}")
       if (!workBuffer.isEmpty) {
         workBuffer.poll.foreach { work =>
           if (logger.isDebugEnabled)
@@ -75,8 +75,9 @@ abstract class Master[T, R](private val nWorkers: Int,
 
     case Terminated(worker) =>
       if (logger.isInfoEnabled)
-        logger.info(s"${self.path} - Worker ${worker.path} died. Removing it from set of workers...")
+        logger.info(s"${self.path} - Termination message got from and restarting worker ${worker.path}...")
       workers.remove(worker)
+      context.unwatch(worker)
       refreshNrOfWorkers()
   }
 
@@ -86,7 +87,7 @@ abstract class Master[T, R](private val nWorkers: Int,
       context.watch(newWorker)
       workers += newWorker
       if (logger.isDebugEnabled)
-        logger.debug(s"${self.path} - Created new worker ${newWorker.path} and watching...")
+        logger.debug(s"${self.path} - Created and watching new worker ${newWorker.path}...")
     }
   }
 
