@@ -30,11 +30,8 @@ abstract class Worker[T, R] extends Actor {
 
   private var shouldAskForWork = true
 
-  override def preStart() {
-    if (logger.isDebugEnabled)
-      logger.debug(s"${self.path} - Asking for work from ${context.parent.path}...")
+  override def preStart() =
     askForWork(context.parent)
-  }
 
   override def receive = {
     case WorkAvailable =>

@@ -142,7 +142,7 @@ class WorkPullingSpec extends Specification {
       val queueSize = 100
       val nWorks = 100
       val nWorkers = 3
-      val nCrashers = 3
+      val nCrashers = 5
 
       val it = ((1 to nCrashers).toList.map(_ => CrashingWorker.props) :::
         (1 to nWorkers).toList.map(_ => PromiseWorker.props)).iterator
