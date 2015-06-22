@@ -14,13 +14,21 @@ object Master {
 
   case object GiveMeWork
 
-  case class WorkWithResult[T, R](work: T, result: Try[R])
+  class Result[W, R] private (val work: W, val assigners: List[ActorRef], val result: Try[R]) {
+    
+    def popAssigner() = new Result(work, assigners.tail, result)
+  }
+
+  object Result {
+    def apply[W, R](work: W, result: Try[R]) = new Result(work, Nil, result)
+
+    def apply[W, R](workFrom: WorkFrom[W], result: Try[R]) = new Result(workFrom.work, workFrom.assigners, result)
+  }
 
   case object TooBusy
 }
 
-abstract class Master[T, R](private val resultCollector: ActorRef,
-                            private val nWorkers: Int,
+abstract class Master[T, R](private val nWorkers: Int,
                             private val workBuffer: WorkBuffer[T]) extends Actor {
 
   private val logger = LoggerFactory.getLogger(getClass)
@@ -30,8 +38,8 @@ abstract class Master[T, R](private val resultCollector: ActorRef,
     refreshNrOfWorkers()
 
   override def receive = {
-    case work: Work[T] =>
-      if (workBuffer.add(work)) {
+    case work: WorkFrom[T] =>
+      if (workBuffer.add(work.assignedBy(sender()))) {
         if (logger.isDebugEnabled)
           logger.debug(s"${self.path} - Work unit with hashcode ${work.work.hashCode} added to queue. Sending notice to all workers...")
         if (workers.isEmpty)
@@ -44,14 +52,15 @@ abstract class Master[T, R](private val resultCollector: ActorRef,
         sender ! TooBusy
       }
 
-    case workResult: WorkWithResult[T, R] =>
+    case result: Result[T, R] =>
+      val returnTo = result.assigners.head
       if (logger.isDebugEnabled) {
-        val resultHash = workResult.result.getOrElse(workResult).hashCode
-        logger.debug(s"${self.path} - Received result from worker ${sender().path} with " +
-          s"hashcode $resultHash for the work unit with " +
-          s"hashcode ${workResult.work.hashCode}. Forwarding to collector.")
+        val resultHash = result.result.getOrElse(result).hashCode
+        logger.debug(s"${self.path} - Received result from ${sender().path} " +
+          s"with result hashcode $resultHash " +
+          s"of work unit hashcode ${result.work.hashCode}. Returning to ${returnTo.path}...")
       }
-      resultCollector ! workResult
+      returnTo ! result.popAssigner()
 
     case GiveMeWork =>
       if (logger.isDebugEnabled)

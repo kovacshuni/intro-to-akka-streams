@@ -4,17 +4,17 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.hunorkovacs.workpulling.WorkBuffer
-import com.hunorkovacs.workpulling.Worker.Work
+import com.hunorkovacs.workpulling.Worker.WorkFrom
 
 
 class BoundedRejectWorkQueue[T](private val limit: Int,
                                 private val refreshPeriod: Int) extends WorkBuffer[T] {
 
-  private val queue = new ConcurrentLinkedQueue[Work[T]]()
+  private val queue = new ConcurrentLinkedQueue[WorkFrom[T]]()
   private val sizeCounter = new AtomicInteger(0)
   private val operationCounter = new AtomicInteger(0)
 
-  override def add(w: Work[T]) = {
+  override def add(w: WorkFrom[T]) = {
     refreshSize()
     if (sizeCounter.get() < limit) {
       sizeCounter.incrementAndGet()
