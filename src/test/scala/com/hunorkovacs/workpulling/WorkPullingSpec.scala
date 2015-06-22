@@ -139,15 +139,13 @@ class WorkPullingSpec extends Specification {
 */
   "Crashing worker" should {
     "make a refresh action in master who will replace the worker." in {
-      val queueSize = 10
-      val nWorks = 10
-      val nWorkers = 1
+      val queueSize = 100
+      val nWorks = 100
+      val nWorkers = 3
       val nCrashers = 3
 
-      val verifier = Inbox.create(system)
-
       val it = ((1 to nCrashers).toList.map(_ => CrashingWorker.props) :::
-        (1 to nWorkers).toList.map(_ => SendingWorker.props(verifier.getRef()))).iterator
+        (1 to nWorkers).toList.map(_ => PromiseWorker.props)).iterator
       def props(): Props = it.next()
 
       val inbox = Inbox.create(system)
@@ -159,7 +157,7 @@ class WorkPullingSpec extends Specification {
       worksAndCompletions.take(nCrashers).foreach(wc => inbox.send(master, wc._1))
       worksAndCompletions.drop(nCrashers).foreach(wc => inbox.send(master, wc._1))
 
-      val actualResults = (1 to nWorks - nCrashers).map(_ => verifier.receive(1 second))
+      val actualResults = (1 to nWorks - nCrashers).map(_ => inbox.receive(1 second))
 
 //      val expectedResults = worksAndCompletions.drop(nCrashers).map(wc => wc._1.resolveWith(wc._2))
 //      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Halp.fieldsEqual(a, b))
