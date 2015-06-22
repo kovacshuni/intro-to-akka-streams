@@ -157,12 +157,10 @@ class WorkPullingSpec extends Specification {
       worksAndCompletions.take(nCrashers).foreach(wc => inbox.send(master, wc._1))
       worksAndCompletions.drop(nCrashers).foreach(wc => inbox.send(master, wc._1))
 
-      val actualResults = (1 to nWorks - nCrashers).map(_ => inbox.receive(1 second))
-
-//      val expectedResults = worksAndCompletions.drop(nCrashers).map(wc => wc._1.resolveWith(wc._2))
-//      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Halp.fieldsEqual(a, b))
-//      actualResults.size must beEqualTo(nWorks)
-      1 must beEqualTo(1)
+      val actualResults = (1 to nWorks - nCrashers).map(_ => inbox.receive(1 second).asInstanceOf[Kept])
+      val expectedResults = worksAndCompletions.drop(nCrashers).map(wc => wc._1.resolveWith(wc._2))
+      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Halp.fieldsEqual(a, b))
+      actualResults.size must beEqualTo(nWorks - nCrashers)
     }
   }
 }
