@@ -17,12 +17,22 @@ object Master {
   class Result[W, R] private (val work: W, val assigners: List[ActorRef], val result: Try[R]) {
     
     def popAssigner() = new Result(work, assigners.tail, result)
+
+    override def equals(that: Any) = that match {
+      case that: Result[W, R] => Result.equal(this, that)
+      case _ => false
+    }
   }
 
   object Result {
     def apply[W, R](work: W, result: Try[R]) = new Result(work, Nil, result)
 
     def apply[W, R](workFrom: WorkFrom[W], result: Try[R]) = new Result(workFrom.work, workFrom.assigners, result)
+
+    def equal[W, R](a: Result[W, R], b: Result[W, R]) =
+      a.work == b.work &&
+        a.assigners == b.assigners &&
+        a.result == b.result
   }
 
   case object TooBusy

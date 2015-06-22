@@ -4,25 +4,22 @@ import java.util.concurrent.TimeoutException
 
 import akka.actor._
 import com.hunorkovacs.collection.mutable.BoundedRejectWorkQueue
-import com.hunorkovacs.workpulling.Halp.Kept
+import com.hunorkovacs.workpulling.PromiseWorker.Kept
 import com.hunorkovacs.workpulling.Master.Result
 import com.hunorkovacs.workpulling.Master.TooBusy
 import com.hunorkovacs.workpulling.Worker.WorkFrom
-import org.slf4j.LoggerFactory
 import org.specs2.mutable.Specification
 
 import scala.collection.mutable
-import scala.concurrent.{Promise, ExecutionContext, Future}
+import scala.concurrent.{Promise, ExecutionContext}
 import scala.util.{Failure, Success, Try}
 
 import scala.concurrent.duration._
 
 class WorkPullingSpec extends Specification {
 
-  private val logger = LoggerFactory.getLogger(getClass)
-
   private val system = ActorSystem("test-actor-system")
-/*
+
   "Sending work and receiving results" should {
     "flow nicely with 1 worker." in {
       val n = 10
@@ -35,7 +32,7 @@ class WorkPullingSpec extends Specification {
 
       val expectedResults = worksAndCompletions.map(wc => wc._1.resolveWith(wc._2))
       val actualResults = (1 to n).toList.map(_ => inbox.receive(2 seconds).asInstanceOf[Kept])
-      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Halp.fieldsEqual(a, b))
+      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Result.equal(a, b))
       actualResults.size must beEqualTo(n)
     }
     "flow nicely with n workers." in {
@@ -49,7 +46,7 @@ class WorkPullingSpec extends Specification {
 
       val expectedResults = worksAndCompletions.map(wc => wc._1.resolveWith(wc._2))
       val actualResults = (1 to n).toList.map(_ => inbox.receive(2 seconds).asInstanceOf[Kept])
-      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Halp.fieldsEqual(a, b))
+      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Result.equal(a, b))
       actualResults.size must beEqualTo(n)
     }
     "not flow with 0 workers." in {
@@ -76,7 +73,7 @@ class WorkPullingSpec extends Specification {
 
       val expectedResults = worksAndCompletions.take(n).map(wc => wc._1.resolveWith(wc._2))
       val actualResults = (1 to n).toList.map(_ => inbox.receive(2 seconds).asInstanceOf[Kept])
-      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Halp.fieldsEqual(a, b))
+      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Result.equal(a, b))
       actualResults.size must beEqualTo(n)
     }
     "flow nicely with failures." in {
@@ -90,7 +87,7 @@ class WorkPullingSpec extends Specification {
 
       val expectedResults = worksAndCompletions.map(wc => wc._1.resolveWith(wc._2))
       val actualResults = (1 to n).toList.map(_ => inbox.receive(2 seconds).asInstanceOf[Kept])
-      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Halp.fieldsEqual(a, b))
+      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Result.equal(a, b))
       actualResults.size must beEqualTo(n)
     }
     "flow nicely with continuous work coming in and going out." in {
@@ -132,11 +129,11 @@ class WorkPullingSpec extends Specification {
       }
 
       val expectedResults = worksAndCompletions.map(wc => wc._1.resolveWith(wc._2))
-      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Halp.fieldsEqual(a, b))
+      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Result.equal(a, b))
       actualResults.size must beEqualTo(nWorks)
     }
   }
-*/
+
   "Crashing worker" should {
     "make a refresh action in master who will replace the worker." in {
       val queueSize = 100
@@ -159,7 +156,7 @@ class WorkPullingSpec extends Specification {
 
       val actualResults = (1 to nWorks - nCrashers).map(_ => inbox.receive(1 second).asInstanceOf[Kept])
       val expectedResults = worksAndCompletions.drop(nCrashers).map(wc => wc._1.resolveWith(wc._2))
-      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Halp.fieldsEqual(a, b))
+      actualResults must containTheSameElementsAs(expectedResults, (a: Kept, b: Kept) => Result.equal(a, b))
       actualResults.size must beEqualTo(nWorks - nCrashers)
     }
   }
@@ -184,6 +181,8 @@ private class PromiseWorker extends Worker[Promise[Int], Int] {
 
 private object PromiseWorker {
   def props = Props(classOf[PromiseWorker])
+
+  type Kept = Result[Promise[Int], Int]
 }
 
 private class PluggableMaster(nWorkers: Int, workBuffer: WorkBuffer[Int], workerProps: () => Props)
@@ -204,38 +203,4 @@ private class CrashingWorker extends PromiseWorker {
 
 private object CrashingWorker {
   def props = Props(classOf[CrashingWorker])
-}
-
-private class SendingWorker(verifier: ActorRef) extends PromiseWorker {
-  private val inbox = Inbox.create(context.system)
-
-  override def doWork(work: Promise[Int]) = {
-    inbox.send(verifier, work.future)
-    work.future
-  }
-}
-
-private object SendingWorker {
-  def props(verifier: ActorRef) = Props(classOf[SendingWorker], verifier)
-}
-
-private object Halp {
-  private def halp[T, R](expectedResults: List[Result[T, R]], actualResults: List[Result[T, R]]) = {
-    expectedResults foreach { e =>
-      if ((actualResults count { a =>
-        a.work.equals(e.work) &&
-          a.assigners.equals(e.assigners) &&
-          a.result.equals(e.result)
-      }) != 1) false
-    }
-    true
-  }
-
-  def fieldsEqual[T, R](a: Result[T, R], b: Result[T, R]) =
-    a.work == b.work &&
-      a.assigners == b.assigners &&
-      a.result == b.result
-
-  type IntPromise = WorkFrom[Promise[Int]]
-  type Kept = Result[Promise[Int], Int]
 }
