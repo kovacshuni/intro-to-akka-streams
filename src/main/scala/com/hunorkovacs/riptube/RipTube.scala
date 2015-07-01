@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
-import akka.stream.ActorFlowMaterializer
+import akka.stream.ActorMaterializer
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.Future
@@ -17,7 +17,7 @@ object RipTube extends App {
 
   implicit private val system = ActorSystem("riptube-system")
   import system.dispatcher
-  implicit val materializer = ActorFlowMaterializer()
+  implicit val materializer = ActorMaterializer()
 
 //  val route =
 //    path("hello") {
