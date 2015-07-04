@@ -14,16 +14,12 @@ object Intro extends App {
   implicit private val materializer = ActorMaterializer()
   private val influx = new Influx(actorSystem)
 
+  val producer = new Producer(influx)
   val slowing = new SlowingConsumer(influx)
 
-  Source[Int](() => Iterator.continually[Int] {
-    Thread.sleep(10)
-    val i = 0
-    influx.bufferedWrite(s"producer value=$i ${System.currentTimeMillis}")
-    i
-  })
+  Source[Int](() => Iterator.continually[Int](producer.produce()))
+    .buffer(300, OverflowStrategy.backpressure)
     .runForeach(slowing.consume)
-
 
   StdIn.readLine()
   influx.shutdown()
@@ -32,12 +28,21 @@ object Intro extends App {
 
 class SlowingConsumer(influx: Influx) {
 
-  private var t = 50
+  private var t = 100
 
   def consume(i: Int) = {
     Thread.sleep(t)
-    t += 1
-    if (t > 500) t = 500
+    if (t < 400) t += 1
     influx.bufferedWrite(s"consumer value=$i ${System.currentTimeMillis}")
+  }
+}
+
+class Producer(influx: Influx) {
+
+  def produce() = {
+    Thread.sleep(50)
+    val i = 0
+    influx.bufferedWrite(s"producer value=$i ${System.currentTimeMillis}")
+    i
   }
 }
