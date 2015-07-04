@@ -1,9 +1,9 @@
 package com.hunorkovacs.introtoakkastreams
 
 import akka.actor.ActorSystem
-import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{Keep, Flow, Sink, Source}
-import org.slf4j.LoggerFactory
+import akka.stream.impl.fusing.Buffer
+import akka.stream.{OverflowStrategy, ActorMaterializer}
+import akka.stream.scaladsl.Source
 
 import scala.io.StdIn
 
@@ -14,18 +14,30 @@ object Intro extends App {
   implicit private val materializer = ActorMaterializer()
   private val influx = new Influx(actorSystem)
 
-  val source = Source[Int](() => Iterator.continually[Int] {
-    Thread.sleep(43)
+  val slowing = new SlowingConsumer(influx)
+
+  Source[Int](() => Iterator.continually[Int] {
+    Thread.sleep(10)
     val i = 0
     influx.bufferedWrite(s"producer value=$i ${System.currentTimeMillis}")
     i
   })
-  val sink = Sink.foreach[Int](i => influx.bufferedWrite(s"consumer value=$i ${System.currentTimeMillis}"))
-  val runnableFlow = source.toMat(sink)(Keep.right)
+    .runForeach(slowing.consume)
 
-  runnableFlow.run()
 
   StdIn.readLine()
   influx.shutdown()
   actorSystem.shutdown()
+}
+
+class SlowingConsumer(influx: Influx) {
+
+  private var t = 50
+
+  def consume(i: Int) = {
+    Thread.sleep(t)
+    t += 1
+    if (t > 500) t = 500
+    influx.bufferedWrite(s"consumer value=$i ${System.currentTimeMillis}")
+  }
 }

@@ -55,5 +55,5 @@ class Influx(actorSystem: ActorSystem) {
     }
   }
 
-  def shutdown() = Await.ready(Http().shutdownAllConnectionPools(), 2 seconds)
+  def shutdown() = Await.ready(Http().shutdownAllConnectionPools(), 5 seconds)
 }
