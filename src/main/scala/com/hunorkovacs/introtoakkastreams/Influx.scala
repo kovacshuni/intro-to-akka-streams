@@ -50,6 +50,4 @@ object Influx {
   case class Metric(line: String, time: Long)
 
   case object Write
-
-  case object WriteAll
 }

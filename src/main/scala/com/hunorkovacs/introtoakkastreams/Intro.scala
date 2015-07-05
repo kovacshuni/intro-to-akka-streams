@@ -4,8 +4,7 @@ import akka.actor._
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl._
-import com.hunorkovacs.introtoakkastreams.Influx.{WriteAll, Metric}
-import org.slf4j.LoggerFactory
+import com.hunorkovacs.introtoakkastreams.Influx.Metric
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
