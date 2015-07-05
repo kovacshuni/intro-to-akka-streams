@@ -1,43 +1,55 @@
 package com.hunorkovacs.introtoakkastreams
 
-import java.util.concurrent.atomic.AtomicLong
-
-import akka.actor.ActorSystem
+import akka.actor.Actor
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model.HttpRequest
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Sink, Source}
+import com.hunorkovacs.introtoakkastreams.Influx.{WriteAll, Metric, Write}
 import org.slf4j.LoggerFactory
 
-class Influx(private val actorSystem: ActorSystem) {
+import scala.collection.mutable
+import scala.concurrent.Await
+import scala.concurrent.duration._
+
+class Influx extends Actor {
 
   private val logger = LoggerFactory.getLogger(getClass)
-  implicit private val implicitSystem = actorSystem
-  implicit private val implicitEc = actorSystem.dispatcher
+  implicit private val implicitSystem = context.system
+  implicit private val implicitEc = context.dispatcher
   implicit private val materializer = ActorMaterializer()
   private val poolClientFlow = Http().cachedHostConnectionPool[String](host = "localhost", port = 8086)
-  private val lastTimeWritten = new AtomicLong(System.currentTimeMillis())
-  private var lines = StringBuilder.newBuilder
+  private val metricsBuffer = mutable.Queue[Metric]()
+  private val writeRhythm = context.system.scheduler.schedule(0 seconds, 1 seconds, self, Write)
 
-  def write(entity: String) = {
-    Source.single(HttpRequest(uri = "/write?db=introtoakkastreams&precision=ms", method = POST, entity = entity) -> entity)
+  override def receive = {
+    case metric: Metric =>
+      metricsBuffer.enqueue(metric)
+
+    case Write =>
+      val secondAgo = System.currentTimeMillis - 1000
+      val lines = metricsBuffer.dequeueAll(_.time < secondAgo)
+        .map(_.line)
+        .mkString("\n")
+      if (lines.nonEmpty) write(lines)
+  }
+
+  private def write(lines: String) = {
+    Source.single(HttpRequest(uri = "/write?db=introtoakkastreams&precision=ms", method = POST, entity = lines) -> lines)
       .via(poolClientFlow)
       .runWith(Sink.head)
       .onComplete { r =>
         if (logger.isDebugEnabled) logger.debug(s"$r")
       }
   }
+}
 
-  def bufferedWrite(line: String) = {
-    val now = System.currentTimeMillis()
-    if (now - lastTimeWritten.get() > 1000 && lines.nonEmpty) {
-      lastTimeWritten.set(now)
-      val entity = lines.append(line).append("\n").mkString
-      lines.clear()
-      write(entity)
-    } else {
-      lines = lines.append(line).append("\n")
-    }
-  }
+object Influx {
+
+  case class Metric(line: String, time: Long)
+
+  case object Write
+
+  case object WriteAll
 }
