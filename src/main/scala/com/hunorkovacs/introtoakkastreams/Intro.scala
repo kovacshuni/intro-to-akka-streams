@@ -1,9 +1,11 @@
 package com.hunorkovacs.introtoakkastreams
 
-import akka.actor.ActorSystem
+import akka.actor._
 import akka.http.scaladsl.Http
-import akka.stream.{OverflowStrategy, ActorMaterializer}
+import akka.stream.ActorMaterializer
 import akka.stream.scaladsl._
+import com.hunorkovacs.introtoakkastreams.Influx.{WriteAll, Metric}
+import org.slf4j.LoggerFactory
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -14,18 +16,17 @@ object Intro extends App {
   implicit private val actorSystem = ActorSystem("grapher-system")
   implicit private val implicitEc = actorSystem.dispatcher
   implicit private val materializer = ActorMaterializer()
+  private val influx = actorSystem.actorOf(Props(classOf[Influx]), "influx")
 
-  private val influx = new Influx(actorSystem)
-  val producer = new Producer(influx)
+  val producer = new Producer(influx, actorSystem)
 
   val source = Source[Int](() => Iterator.continually[Int](producer.produce()))
-  val consumers = (1 to 2).toList.map(i => Flow[Int].map(new SlowingConsumer(new Influx(actorSystem), s"consumer-$i").consume))
-  val consumers2 = List(Flow[Int].map(new SlowingConsumer(new Influx(actorSystem), "consumer-1").consume),
-    Flow[Int].map(new Consumer(new Influx(actorSystem), s"consumer-2").consume))
-  source
-    .via(balancer[Int, Unit](consumers2))
-    .to(Sink.ignore)
-    .run()
+  val workers = List(Flow[Int].map(new SlowingConsumer("consumer-1", influx, actorSystem).consume),
+    Flow[Int].map(new Consumer("consumer-2", influx, actorSystem).consume))
+
+  val runnable = source
+    .via(balancer[Int, Unit](workers))
+    .runWith(Sink.ignore)
 
   StdIn.readLine()
   Await.ready(Http().shutdownAllConnectionPools(), 5 seconds)
@@ -45,31 +46,39 @@ object Intro extends App {
   }
 }
 
-class SlowingConsumer(influx: Influx, name: String) {
+class SlowingConsumer(name: String, influx: ActorRef, system: ActorSystem) extends Measured(influx, system) {
 
   private var t = 100
 
   def consume(i: Int) = {
     Thread.sleep(t)
     if (t < 600) t += 1
-    influx.bufferedWrite(s"$name value=$i ${System.currentTimeMillis}")
+    val now = System.currentTimeMillis
+    inbox.send(influx, Metric(s"$name value=$i $now", now))
   }
 }
 
-class Consumer(influx: Influx, name: String) {
+class Consumer(name: String, influx: ActorRef, system: ActorSystem) extends Measured(influx, system) {
 
   def consume(i: Int) = {
     Thread.sleep(70)
-    influx.bufferedWrite(s"$name value=$i ${System.currentTimeMillis}")
+    val now = System.currentTimeMillis
+    inbox.send(influx, Metric(s"$name value=$i $now", now))
   }
 }
 
-class Producer(influx: Influx) {
+class Producer(influx: ActorRef, system: ActorSystem) extends Measured(influx, system) {
 
   def produce() = {
     Thread.sleep(50)
     val i = 0
-    influx.bufferedWrite(s"producer value=$i ${System.currentTimeMillis}")
+    val now = System.currentTimeMillis
+    inbox.send(influx, Metric(s"producer value=$i $now", now))
     i
   }
+}
+
+abstract class Measured(private val influx: ActorRef, private val system: ActorSystem) {
+
+  protected val inbox = Inbox.create(system)
 }
