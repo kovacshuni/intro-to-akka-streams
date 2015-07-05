@@ -6,7 +6,7 @@ import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model.HttpRequest
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Sink, Source}
-import com.hunorkovacs.introtoakkastreams.Influx.{WriteAll, Metric, Write}
+import com.hunorkovacs.introtoakkastreams.Influx.{Metric, Write}
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
