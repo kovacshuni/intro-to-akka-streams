@@ -10,7 +10,6 @@ import com.hunorkovacs.introtoakkastreams.Influx.{Metric, Write}
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
-import scala.concurrent.Await
 import scala.concurrent.duration._
 
 class Influx extends Actor {
