@@ -10,10 +10,7 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Sink, Source}
 import org.slf4j.LoggerFactory
 
-import scala.concurrent.Await
-import scala.concurrent.duration._
-
-class Influx(actorSystem: ActorSystem) {
+class Influx(private val actorSystem: ActorSystem) {
 
   private val logger = LoggerFactory.getLogger(getClass)
   implicit private val implicitSystem = actorSystem
@@ -36,16 +33,11 @@ class Influx(actorSystem: ActorSystem) {
     val now = System.currentTimeMillis()
     if (now - lastTimeWritten.get() > 1000 && lines.nonEmpty) {
       lastTimeWritten.set(now)
-      val entity = lines
-        .append(line)
-        .append("\n")
-        .mkString
+      val entity = lines.append(line).append("\n").mkString
       lines.clear()
       write(entity)
     } else {
-      lines = lines
-        .append(line)
-        .append("\n")
+      lines = lines.append(line).append("\n")
     }
   }
 }
