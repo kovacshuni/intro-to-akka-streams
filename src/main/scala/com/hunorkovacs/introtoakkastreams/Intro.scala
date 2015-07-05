@@ -51,7 +51,7 @@ class SlowingConsumer(influx: Influx, name: String) {
 
   def consume(i: Int) = {
     Thread.sleep(t)
-    if (t < 400) t += 1
+    if (t < 600) t += 1
     influx.bufferedWrite(s"$name value=$i ${System.currentTimeMillis}")
   }
 }
@@ -59,7 +59,7 @@ class SlowingConsumer(influx: Influx, name: String) {
 class Consumer(influx: Influx, name: String) {
 
   def consume(i: Int) = {
-    Thread.sleep(100)
+    Thread.sleep(70)
     influx.bufferedWrite(s"$name value=$i ${System.currentTimeMillis}")
   }
 }
