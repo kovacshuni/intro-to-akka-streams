@@ -24,8 +24,7 @@ class Influx(actorSystem: ActorSystem) {
   private var lines = StringBuilder.newBuilder
 
   def write(entity: String) = {
-    Source.single(HttpRequest(uri = "/write?db=introtoakkastreams&precision=ms", method = POST,
-        entity = s"$entity") -> s"$entity")
+    Source.single(HttpRequest(uri = "/write?db=introtoakkastreams&precision=ms", method = POST, entity = entity) -> entity)
       .via(poolClientFlow)
       .runWith(Sink.head)
       .onComplete { r =>
@@ -42,18 +41,11 @@ class Influx(actorSystem: ActorSystem) {
         .append("\n")
         .mkString
       lines.clear()
-      Source.single(HttpRequest(uri = "/write?db=introtoakkastreams&precision=ms", method = POST, entity = entity) -> entity)
-        .via(poolClientFlow)
-        .runWith(Sink.head)
-        .onComplete { r =>
-          if (logger.isDebugEnabled) logger.debug(s"$r")
-        }
+      write(entity)
     } else {
       lines = lines
         .append(line)
         .append("\n")
     }
   }
-
-  def shutdown() = Await.ready(Http().shutdownAllConnectionPools(), 5 seconds)
 }
