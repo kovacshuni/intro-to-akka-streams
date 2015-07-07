@@ -23,7 +23,7 @@ class SlowingConsumer(name: String, influx: ActorRef, system: ActorSystem) exten
 class Consumer(name: String, influx: ActorRef, system: ActorSystem) extends Measured(influx, system) {
 
   def consume(i: Int) = {
-    Thread.sleep(70)
+    Thread.sleep(2000)
     val now = System.currentTimeMillis
     inbox.send(influx, Metric(s"$name value=$i $now", now))
   }
