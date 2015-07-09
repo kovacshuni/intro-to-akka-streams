@@ -1,35 +1,28 @@
 package com.hunorkovacs.introtoakkastreams
 
-import akka.actor._
+import akka.actor.{Props, ActorSystem}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.HttpRequest
-import akka.http.scaladsl.model.HttpMethods._
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl._
+import akka.stream.scaladsl.{Sink, Source}
 
 import scala.concurrent.Await
-import scala.concurrent.duration._
 import scala.io.StdIn
+import scala.concurrent.duration._
 
 object Intro extends App {
 
-  implicit private val actorSystem = ActorSystem("grapher-system")
-  implicit private val implicitEc = actorSystem.dispatcher
-  implicit private val materializer = ActorMaterializer()
-  private val influx = actorSystem.actorOf(Props(classOf[Influx]), "influx")
+  implicit private val sys = ActorSystem("intro")
+  implicit private val mat = ActorMaterializer()
+  private val influx = sys.actorOf(Props(classOf[Influx]), "influx")
 
-  val producer = new Producer(influx, actorSystem)
+  val producer = new Producer(influx, sys)
+  val consumer = new Consumer(influx, sys)
 
-  val source = Source[Int](() => Iterator.continually[Int](producer.produce()))
-
-  val poolClientFlow = Http().cachedHostConnectionPool[Int](host = "localhost", port = 9000)
-
-  val runnable = source
-    .map(i => HttpRequest(uri = "/", method = POST, entity = i.toString) -> i)
-    .via(poolClientFlow)
-    .runWith(Sink.ignore)
+  Source[Int](() => Iterator.continually(producer.produce()))
+    .runForeach(consumer.consume(_))
 
   StdIn.readLine()
-  Await.ready(Http().shutdownAllConnectionPools(), 5 seconds)
-  actorSystem.shutdown()
+  Await.ready(Http().shutdownAllConnectionPools(), 2 seconds)
+  sys.shutdown()
+  sys.awaitTermination(2 seconds)
 }
