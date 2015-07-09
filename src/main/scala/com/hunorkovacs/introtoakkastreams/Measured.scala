@@ -19,15 +19,29 @@ class Producer(influx: ActorRef, sys: ActorSystem) extends Measured(influx, sys)
   }
 }
 
-class Consumer(influx: ActorRef, sys: ActorSystem) extends Measured(influx, sys) {
+trait Consumer {
+  def consume(i: Int)
+}
+
+class SlowingConsumer(name: String, influx: ActorRef, sys: ActorSystem) extends Measured(influx, sys) with Consumer {
 
   private var t = 50
 
-  def consume(i: Int) = {
+  override def consume(i: Int) = {
     Thread.sleep(t)
     if (t < 200) t += 1
     val now = System.currentTimeMillis
-    inbox.send(influx, Metric(s"consumer value=$i $now", now))
+    inbox.send(influx, Metric(s"$name value=$i $now", now))
+    i
+  }
+}
+
+class NormalConsumer(name: String, influx: ActorRef, sys: ActorSystem) extends Measured(influx, sys) with Consumer {
+
+  override def consume(i: Int) = {
+    Thread.sleep(50)
+    val now = System.currentTimeMillis
+    inbox.send(influx, Metric(s"$name value=$i $now", now))
     i
   }
 }
