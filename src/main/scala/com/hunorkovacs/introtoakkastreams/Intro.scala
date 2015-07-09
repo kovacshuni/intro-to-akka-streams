@@ -37,27 +37,12 @@ object Intro extends App {
     import FlowGraph.Implicits._
 
     Flow() { implicit builder =>
-      val broadcast = builder.add(Broadcast[In](workers.size))
+      val balance = builder.add(Balance[In](workers.size))
       val merge = builder.add(Merge[Out](workers.size))
 
-      workers.foreach(broadcast ~> _ ~> merge)
+      workers.foreach(balance ~> _ ~> merge)
 
-      (broadcast.in, merge.out)
-    }
-  }
-
-
-
-  def balancerrrr[In, Out](workers: List[Flow[In, Out, Unit]]) = {
-    import FlowGraph.Implicits._
-
-    Flow() { implicit builder =>
-      val balancer = builder.add(Balance[In](workers.size, waitForAllDownstreams = true))
-      val merge = builder.add(Merge[Out](workers.size))
-
-      workers.foreach(balancer ~> _ ~> merge)
-
-      (balancer.in, merge.out)
+      (balance.in, merge.out)
     }
   }
 }
