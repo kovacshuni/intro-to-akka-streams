@@ -2,8 +2,8 @@ package com.hunorkovacs.introtoakkastreams
 
 import akka.actor.{Props, ActorSystem}
 import akka.http.scaladsl.Http
-import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.{OverflowStrategy, ActorMaterializer}
+import akka.stream.scaladsl.{FlowGraph, Sink, Source}
 
 import scala.concurrent.Await
 import scala.io.StdIn
@@ -19,6 +19,7 @@ object Intro extends App {
   val consumer = new Consumer(influx, sys)
 
   Source[Int](() => Iterator.continually(producer.produce()))
+    .buffer(50, OverflowStrategy.backpressure)
     .runForeach(consumer.consume(_))
 
   StdIn.readLine()
