@@ -2,7 +2,7 @@ package com.hunorkovacs.introtoakkastreams
 
 import akka.actor.{ActorSystem, Props}
 import akka.http.scaladsl.Http
-import akka.stream.ActorMaterializer
+import akka.stream.{OverflowStrategy, ActorMaterializer}
 import akka.stream.scaladsl._
 
 import scala.concurrent.Await
@@ -16,9 +16,11 @@ object Intro extends App {
   private val influx = sys.actorOf(Props[Influx], "influx")
 
   private val producer = new Producer(influx, sys)
-  private val consumers = List(new NormalConsumer(influx, sys), new SlowingConsumer(influx, sys))
 
-  private val balancer = balance(consumers.map(consumer => Flow[Int].map(consumer.consume)))
+  private val normalFlow = Flow[Int].map(new NormalConsumer(influx, sys).consume)
+  private val slowingFlow = Flow[Int].buffer(100, OverflowStrategy.backpressure).map(new SlowingConsumer(influx, sys).consume)
+
+  private val balancer = balance(List(normalFlow, slowingFlow))
 
   Source(() => Iterator.continually[Int](producer.produce()))
     .via(balancer)
