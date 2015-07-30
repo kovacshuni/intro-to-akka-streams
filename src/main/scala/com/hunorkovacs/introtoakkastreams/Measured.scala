@@ -16,7 +16,7 @@ trait Consumer {
 class NormalConsumer(influx: ActorRef, sys: ActorSystem) extends Measured(influx, sys) with Consumer {
 
   override def consume(i: Int) = {
-    Thread.sleep(100)
+    Thread.sleep(80)
     val now = System.currentTimeMillis
     inbox.send(influx, Metric(s"consumer-1 value=$i $now", now))
   }
@@ -28,7 +28,7 @@ class SlowingConsumer(influx: ActorRef, sys: ActorSystem) extends Measured(influ
 
   override def consume(i: Int) = {
     Thread.sleep(t)
-    if (t < 300) t += 1
+    if (t < 300) t += 2
     val now = System.currentTimeMillis
     inbox.send(influx, Metric(s"consumer-2 value=$i $now", now))
   }
