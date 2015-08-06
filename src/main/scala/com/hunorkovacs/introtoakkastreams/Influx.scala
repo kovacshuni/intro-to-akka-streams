@@ -15,8 +15,9 @@ import scala.concurrent.duration._
 class Influx extends Actor {
 
   private val logger = LoggerFactory.getLogger(getClass)
+  implicit private val sys = context.system
   import context.dispatcher
-  implicit private val mat = ActorMaterializer()(context.system)
+  implicit private val mat = ActorMaterializer()
   private val poolClientFlow = Http().cachedHostConnectionPool[String](host = "localhost", port = 8086)
   private val metricsBuffer = mutable.Queue[Metric]()
 
