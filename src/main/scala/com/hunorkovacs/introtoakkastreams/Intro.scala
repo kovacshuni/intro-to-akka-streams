@@ -1,9 +1,9 @@
 package com.hunorkovacs.introtoakkastreams
 
-import akka.actor.{Props, ActorSystem}
+import akka.actor.{ActorSystem, Props}
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.scaladsl.Source
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -16,9 +16,10 @@ object Intro extends App {
 
   private val influx = sys.actorOf(Props[Influx], "influx")
   private val producer = new Producer(influx, sys)
+  private val consumer = new NormalConsumer(influx, sys)
 
   Source(() => Iterator.continually[Int](producer.produce()))
-    .runWith(Sink.ignore)
+    .runForeach(consumer.consume)
 
   StdIn.readLine()
   Await.ready(Http().shutdownAllConnectionPools(), 2 seconds)
