@@ -15,12 +15,12 @@ import scala.concurrent.duration._
 class Influx extends Actor {
 
   private val logger = LoggerFactory.getLogger(getClass)
-  implicit private val implicitSystem = context.system
-  implicit private val implicitEc = context.dispatcher
-  implicit private val materializer = ActorMaterializer()
+  import context.dispatcher
+  implicit private val mat = ActorMaterializer()(context.system)
   private val poolClientFlow = Http().cachedHostConnectionPool[String](host = "localhost", port = 8086)
   private val metricsBuffer = mutable.Queue[Metric]()
-  private val writeRhythm = context.system.scheduler.schedule(0 seconds, 1 seconds, self, Write)
+
+  context.system.scheduler.schedule(0 seconds, 1 seconds, self, Write)
 
   override def receive = {
     case metric: Metric =>
