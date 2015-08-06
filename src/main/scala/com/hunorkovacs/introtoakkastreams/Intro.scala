@@ -2,6 +2,8 @@ package com.hunorkovacs.introtoakkastreams
 
 import akka.actor.{ActorSystem, Props}
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.HttpMethods.POST
+import akka.http.scaladsl.model.HttpRequest
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl._
 
@@ -16,29 +18,16 @@ object Intro extends App {
 
   private val influx = sys.actorOf(Props[Influx], "influx")
   private val producer = new Producer(influx, sys)
-  private val consumers = List(new NormalConsumer(influx, sys), new SlowingConsumer(influx, sys))
 
-  private val balancer = balance[Int, Unit](consumers.map(consumer => Flow[Int].map(i => consumer.consume(i))))
+  private val httpFlow = Http().cachedHostConnectionPool[Int]("localhost", 8080)
 
   Source(() => Iterator.continually[Int](producer.produce()))
-    .via(balancer)
+    .map(i => HttpRequest(method = POST, uri = "/consume", entity = i.toString) -> i)
+    .via(httpFlow)
     .runWith(Sink.ignore)
 
   StdIn.readLine()
   Await.ready(Http().shutdownAllConnectionPools(), 2 seconds)
   sys.shutdown()
   sys.awaitTermination()
-
-  private def balance[In, Out](workers: List[Flow[In, Out, Unit]]) = {
-    import akka.stream.scaladsl.FlowGraph.Implicits._
-
-    Flow() { implicit builder =>
-      val balance = builder.add(Balance[In](workers.size))
-      val merge = builder.add(Merge[Out](workers.size))
-
-      workers.foreach(balance ~> _ ~> merge)
-
-      (balance.in, merge.out)
-    }
-  }
 }

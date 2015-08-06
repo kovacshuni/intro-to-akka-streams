@@ -27,7 +27,7 @@ class Producer(influx: ActorRef, sys: ActorSystem) extends Measured(influx, sys)
 class NormalConsumer(influx: ActorRef, sys: ActorSystem) extends Measured(influx, sys) with Consumer {
 
   override def consume(i: Int) = {
-    Thread.sleep(100)
+    Thread.sleep(2000)
     val now = System.currentTimeMillis
     inbox.send(influx, Metric(s"consumer-1 value=$i $now", now))
   }
