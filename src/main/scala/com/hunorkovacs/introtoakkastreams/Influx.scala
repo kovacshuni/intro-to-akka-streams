@@ -8,7 +8,6 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Sink, Source}
 import com.hunorkovacs.introtoakkastreams.Influx.{Metric, Write}
 import org.slf4j.LoggerFactory
-import com.typesafe.cinnamon.akka.Tracer
 
 import scala.collection.mutable
 import scala.concurrent.duration._
@@ -21,11 +20,8 @@ class Influx extends Actor {
   implicit private val mat = ActorMaterializer()
   private val poolClientFlow = Http().cachedHostConnectionPool[String](host = "localhost", port = 8086)
   private val metricsBuffer = mutable.Queue[Metric]()
-  Tracer(context.system)
 
-  Tracer(context.system).start("testingTrace") {
-    context.system.scheduler.schedule(0 seconds, 1 seconds, self, Write)
-  }
+  context.system.scheduler.schedule(0 seconds, 1 seconds, self, Write)
 
   override def receive = {
     case metric: Metric =>
@@ -37,7 +33,6 @@ class Influx extends Actor {
         .map(_.line)
         .mkString("\n")
       if (lines.nonEmpty) write(lines)
-      Tracer(context.system).end("testingTrace")
   }
 
   private def write(lines: String) = {
