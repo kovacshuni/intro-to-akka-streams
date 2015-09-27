@@ -1,6 +1,6 @@
 package com.hunorkovacs.introtoakkastreams
 
-import akka.actor.Actor
+import akka.actor.{Props, Actor}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model.HttpRequest
@@ -50,4 +50,6 @@ object Influx {
   case class Metric(line: String, time: Long)
 
   case object Write
+
+  def props = Props(classOf[Influx])
 }
