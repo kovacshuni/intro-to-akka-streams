@@ -2,7 +2,7 @@ package com.hunorkovacs.introtoakkastreams
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.stream.ActorMaterializer
+import akka.stream.{OverflowStrategy, ActorMaterializer}
 import akka.stream.scaladsl.{Sink, Source}
 
 import scala.concurrent.Await
@@ -17,12 +17,15 @@ object Intro extends App {
 
   val producer = new Producer(influx, sys)
   val consumer = new NormalConsumer(influx, sys)
+  val consumer2 = new SlowingConsumer(influx, sys)
 
   Source(() => Iterator.continually(producer.produce()))
-    .runWith(Sink.foreach(consumer.consume))
+    .buffer(100, OverflowStrategy.backpressure)
+    .runWith(Sink.foreach(consumer2.consume))
 
   StdIn.readLine()
   Await.ready(Http().shutdownAllConnectionPools(), 2 seconds)
   sys.shutdown()
   sys.awaitTermination()
+
 }
