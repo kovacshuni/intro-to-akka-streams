@@ -2,7 +2,7 @@ package com.hunorkovacs.introtoakkastreams
 
 import akka.actor.{Props, Inbox, ActorSystem}
 import akka.http.scaladsl.Http
-import akka.stream.ActorMaterializer
+import akka.stream.{OverflowStrategy, ActorMaterializer}
 import akka.stream.scaladsl.{Sink, Source}
 import com.hunorkovacs.introtoakkastreams.Influx.Metric
 
@@ -14,28 +14,16 @@ object Intro extends App {
 
   implicit private val sys = ActorSystem("intro")
   implicit private val mat = ActorMaterializer()
-
   private val influx = sys.actorOf(Props[Influx], "influx")
-  private val inbox = Inbox.create(sys)
 
-  val source = Source(() => Iterator.continually{
-    Thread.sleep(50)
-    val i = 0
-    val now = System.currentTimeMillis
-    inbox.send(influx, Metric(s"producer $i $now", now))
-    i
-  })
-  val sink = Sink.foreach[Int] { i =>
-//    Thread.sleep(100)
-//    val now = System.currentTimeMillis
-//    inbox.send(influx, Metric(s"consumer $i $now", now))
-  }
+  private val producer = new Producer(influx, sys)
+  private val consumer = new SlowingConsumer(influx, sys)
 
-  val runnableFlow = source.to(sink)
+  Source(() => Iterator.continually(producer.produce()))
+    .buffer(100, OverflowStrategy.backpressure)
+    .runWith(Sink.foreach(consumer.consume))
 
-  runnableFlow.run()
-
-  StdIn.readLine
+  StdIn.readLine()
   Await.ready(Http().shutdownAllConnectionPools(), 2 seconds)
   sys.shutdown()
   sys.awaitTermination()
