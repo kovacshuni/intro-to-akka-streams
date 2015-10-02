@@ -1,40 +1,39 @@
 package com.hunorkovacs.introtoakkastreams
 
-import akka.actor.{ActorSystem, Props}
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.HttpMethods.POST
-import akka.http.scaladsl.model.{HttpMethods, HttpRequest}
+import akka.actor.{Inbox, Props, ActorSystem}
+import akka.stream.{OverflowStrategy, ActorMaterializer}
 import akka.stream.scaladsl._
-import akka.stream.{ActorMaterializer, OverflowStrategy}
+import com.hunorkovacs.introtoakkastreams.Influx.Metric
 
-import scala.concurrent.Await
-import scala.concurrent.duration._
+import scala.concurrent.Future
 import scala.io.StdIn
 
 object Intro extends App {
 
-  implicit private val sys = ActorSystem("intro")
-  implicit private val mat = ActorMaterializer()
-  private val influx = sys.actorOf(Props[Influx], "influx")
+  implicit private var sys = ActorSystem("intro")
+  implicit private var mat = ActorMaterializer()
+
+  private val influx = sys.actorOf(Props[Influx])
 
   private val producer = new Producer(influx, sys)
-
-  private val connectionFlow = Http().cachedHostConnectionPool[Int]("localhost", 8080)
+  private val consumers = List(new NormalConsumer(influx, sys))
+  private val consumerFlow = consumers.map(c => Flow[Int].map(i => c.consume(i)))
+  private val balancer = balance(consumerFlow)
 
   Source(() => Iterator.continually(producer.produce))
-    .map(i => HttpRequest(method = POST, uri = "/consume", entity = i.toString) -> i)
-    .via(connectionFlow)
+    .buffer(100, OverflowStrategy.backpressure)
+    .via(balancer)
     .runWith(Sink.ignore)
 
   StdIn.readLine()
-  Await.ready(Http().shutdownAllConnectionPools(), 2 seconds)
   sys.shutdown()
   sys.awaitTermination()
+
+
+  val v1 = Future()
+  v2 = Future(b(v88))
+  r = Future(c(v2))
+
+
+
 }
-
-
-
-
-
-
-
