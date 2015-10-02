@@ -29,7 +29,7 @@ class NormalConsumer(influx: ActorRef, sys: ActorSystem)
   extends Measured(influx, sys) with Consumer {
 
   def consume(i: Int) = {
-    Thread.sleep(100)
+    Thread.sleep(70)
     val now = System.currentTimeMillis
     inbox.send(influx, Metric(s"consumer-1 value=$i $now", now))
   }
@@ -38,7 +38,7 @@ class NormalConsumer(influx: ActorRef, sys: ActorSystem)
 class SlowingConsumer(influx: ActorRef, sys: ActorSystem)
   extends Measured(influx, sys) with Consumer {
 
-  private var t = 100
+  private var t = 80
 
   def consume(i: Int) = {
     Thread.sleep(t)
