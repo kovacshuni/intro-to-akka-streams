@@ -4,7 +4,7 @@ name := """intro-to-akka-streams"""
 
 version := "1.0.0-SNAPSHOT"
 
-scalaVersion := "2.11.6"
+scalaVersion := "2.11.7"
 
 libraryDependencies ++= List(
   "com.typesafe.akka" %% "akka-http-experimental" % "1.0",
